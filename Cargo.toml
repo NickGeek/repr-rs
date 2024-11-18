@@ -1,9 +1,24 @@
 [package]
 name = "repr-rs"
+authors = ["Nick Webster <nick@nick.geek.nz>"]
+license = "MPL-2"
+categories = ["caching", "concurrency"]
 version = "0.1.0"
 edition = "2021"
+
+[features]
+eager = ["tokio", "crossbeam"]
 
 [dependencies]
 hashbrown = "0.15.1"
 downcast-rs = "1.2.1"
-atom = "0.4.0"
+
+# feature = eager
+tokio = { version = "1.41.1", optional = true, features = ["rt", "sync"] }
+crossbeam = { version = "0.8.4", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1.41.1", features = ["full"] }
+
+[profile.test]
+opt-level = 3
