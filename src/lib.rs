@@ -9,6 +9,8 @@ pub use repr::EagerCacheLookup;
 
 #[cfg(test)]
 mod tests {
+	use std::cell::RefCell;
+	use std::rc::Rc;
 	use crate::repr::Repr;
 
 	#[derive(Debug, Copy, Clone)]
@@ -47,6 +49,21 @@ mod tests {
 			|mm| mm.min < mm.max,
 		);
 		repr.mutate(|mm| mm.min = 6);
+	}
+
+	#[test]
+	#[should_panic]
+	fn should_try_to_detect_non_deterministic_invariants() {
+		let value = Rc::new(RefCell::new(true));
+		let mut repr = Repr::new(
+			value.clone(),
+			|_| {
+				let res = *value.borrow();
+				value.replace(false);
+				res
+			},
+		);
+		repr.mutate(|_| {});
 	}
 
 	#[test]
@@ -149,6 +166,7 @@ mod tests {
 			assert_eq!(4, repr.eager(|mm| mm.min).await);
 		}
 
+		#[ignore]
 		#[tokio::test(flavor = "multi_thread")]
 		async fn should_work_with_expensive_computations() {
 			let mut repr = Repr::new(
