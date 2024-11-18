@@ -1,6 +1,12 @@
 mod repr;
 mod cache;
 
+// Re-exports
+pub use repr::Repr;
+pub use repr::ReprView;
+#[cfg(feature = "eager")]
+pub use repr::EagerCacheLookup;
+
 #[cfg(test)]
 mod tests {
 	use crate::repr::Repr;

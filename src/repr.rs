@@ -4,6 +4,8 @@ use crate::cache::{lazy, Cache};
 use std::borrow::Cow;
 use std::cell::{Ref, RefCell};
 use std::collections::BTreeMap;
+#[cfg(feature = "eager")]
+use std::future::Future;
 use std::ops::Deref;
 
 pub struct Repr<T, I: Fn(&T) -> bool> {
@@ -57,7 +59,7 @@ impl<T: 'static, I: Fn(&T) -> bool> Repr<T, I> {
 
 #[cfg(feature = "eager")]
 pub trait EagerCacheLookup<T: Clone + Sync + Send + 'static, I: Fn(&T) -> bool> {
-	async fn eager<R: Clone + Clone + Sync + Send + 'static>(&mut self, read_fn: fn(&T) -> R) -> R;
+	fn eager<R: Clone + Clone + Sync + Send + 'static>(&mut self, read_fn: fn(&T) -> R) -> impl Future<Output=R>;
 	fn unregister<R: Clone + Clone + Sync + Send + 'static>(&mut self, read_fn: fn(&T) -> R) -> bool;
 }
 #[cfg(feature = "eager")]
