@@ -10,11 +10,11 @@ use std::ops::Deref;
 
 /// Wraps a value and ensures that an invariant is maintained while allowing that value to be
 /// mutated. The invariant is checked after every mutation.
-/// 
+///
 /// Additionally, this struct allows for cacheable reads of the value. This is useful when the
 /// read function is expensive. By default, the caching is lazy, so after a value is read once that
 /// same read function will fetch the cached value unless the value has been mutated.
-/// 
+///
 /// With the feature `eager` enabled, the [`EagerCacheLookup`] trait is implemented for this struct
 /// and can be used to cache values eagerly. Whenever the value is mutated, all eager caches
 /// will be updated in parallel.
@@ -31,7 +31,7 @@ impl<T: 'static, I: Fn(&T) -> bool> Repr<T, I> {
 	/// use repr_rs::Repr;
 	/// struct MinMax { min: i32, max: i32 }
 	/// Repr::new(
-	///   MinMax { min: 1, max: 5 }, 
+	///   MinMax { min: 1, max: 5 },
 	///   |mm| mm.min < mm.max,
 	/// );
 	/// ```
@@ -49,7 +49,7 @@ impl<T: 'static, I: Fn(&T) -> bool> Repr<T, I> {
 	/// use repr_rs::Repr;
 	/// struct MinMax { min: i32, max: i32 }
 	/// Repr::with_msg(
-	///   MinMax { min: 1, max: 5 }, 
+	///   MinMax { min: 1, max: 5 },
 	///   |mm| mm.min < mm.max,
 	///   "min must be less than max".into(),
 	/// );
@@ -91,7 +91,7 @@ impl<T: 'static, I: Fn(&T) -> bool> Repr<T, I> {
 	/// assert_eq!(4, view.min);
 	/// assert_eq!(5, view.max);
 	/// ```
-	/// 
+	///
 	/// Rust's borrowing rules prevent the read-only view being held while a mutation occurs. For
 	/// example, this won't compile:
 	/// ```compile_fail
@@ -121,7 +121,7 @@ impl<T: 'static, I: Fn(&T) -> bool> Repr<T, I> {
 	}
 	/// Borrows a read-only view of the value in the representation invariant and caches the
 	/// result of the read function. The cache is keyed by the read function's address, so in general
-	/// you should use function references instead of closures. It is a bug to perform any side-effects
+	/// you should use function references instead of closures. It is a bug to perform any side effects
 	/// in the read function (i.e. reading from a file).
 	pub fn lazy<R: Clone + 'static>(&mut self, read_fn: fn(&T) -> R) -> R {
 		let fn_identity = read_fn as *const fn(&T) -> R as usize;
