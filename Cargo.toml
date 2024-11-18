@@ -1,5 +1,5 @@
 [package]
-name = "repr"
+name = "repr-rs"
 authors = ["Nick Webster <nick@nick.geek.nz>"]
 license = "MPL-2.0"
 description = "A library for representation invariants with caching and parallelism support."
