@@ -5,7 +5,7 @@ license = "MPL-2.0"
 description = "A library for representation invariants with caching and parallelism support."
 repository = "https://github.com/NickGeek/repr-rs"
 categories = ["caching", "concurrency"]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 exclude = [
     ".idea"
@@ -27,3 +27,6 @@ tokio = { version = "1.41.1", features = ["full"] }
 
 [profile.test]
 opt-level = 3
+
+[package.metadata.docs.rs]
+all-features = true
