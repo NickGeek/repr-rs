@@ -7,6 +7,9 @@ repository = "https://github.com/NickGeek/repr-rs"
 categories = ["caching", "concurrency"]
 version = "0.1.0"
 edition = "2021"
+exclude = [
+    ".idea"
+]
 
 [features]
 eager = ["tokio", "crossbeam"]
