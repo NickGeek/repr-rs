@@ -164,17 +164,18 @@ impl<T: 'static, I: Fn(&T) -> bool> Repr<T, I> {
 
 #[cfg(feature = "eager")]
 pub trait EagerCacheLookup<T: Clone + Sync + Send + 'static, I: Fn(&T) -> bool> {
-	fn eager<R: Clone + Clone + Sync + Send + 'static>(&mut self, read_fn: fn(&T) -> R) -> impl Future<Output=R>;
-	fn unregister<R: Clone + Clone + Sync + Send + 'static>(&mut self, read_fn: fn(&T) -> R) -> bool;
-}
-#[cfg(feature = "eager")]
-impl<T: Clone + Sync + Send + 'static, I: Fn(&T) -> bool> EagerCacheLookup<T, I> for Repr<T, I> {
 	/// Borrows a read-only view of the value in the representation invariant and caches the
 	/// result of the read function. The cache is keyed by the read function's address, so in general
 	/// you should use function references instead of closures. It is a bug to perform any side effects
 	/// in the read function (i.e. reading from a file). This cache is updated eagerly, so whenever
 	/// the value is mutated, all eager caches will be updated in parallel. See [`Repr::lazy`] for
 	/// a lazy version of this function.
+	fn eager<R: Clone + Clone + Sync + Send + 'static>(&mut self, read_fn: fn(&T) -> R) -> impl Future<Output=R>;
+	/// Unregisters an eager cache. Returns true if the cache was found and removed.
+	fn unregister<R: Clone + Clone + Sync + Send + 'static>(&mut self, read_fn: fn(&T) -> R) -> bool;
+}
+#[cfg(feature = "eager")]
+impl<T: Clone + Sync + Send + 'static, I: Fn(&T) -> bool> EagerCacheLookup<T, I> for Repr<T, I> {
 	#[allow(clippy::await_holding_refcell_ref)] // safe because the &mut self on this fn prevents other borrows
 	async fn eager<R: Clone + Sync + Send + 'static>(&mut self, read_fn: fn(&T) -> R) -> R {
 		let fn_identity = read_fn as *const fn(&T) -> R as usize;
@@ -189,7 +190,6 @@ impl<T: Clone + Sync + Send + 'static, I: Fn(&T) -> bool> EagerCacheLookup<T, I>
 		}
 		cache.read(data)
 	}
-	/// Unregisters an eager cache. Returns true if the cache was found and removed.
 	fn unregister<R: Clone + Clone + Sync + Send + 'static>(&mut self, read_fn: fn(&T) -> R) -> bool {
 		let fn_identity = read_fn as *const fn(&T) -> R as usize;
 		self.eager_caches.remove(&fn_identity).is_some()
