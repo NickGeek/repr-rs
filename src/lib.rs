@@ -1,17 +1,17 @@
 mod repr;
 mod cache;
 
+#[cfg(feature = "eager")]
+pub use repr::EagerCacheLookup;
 // Re-exports
 pub use repr::Repr;
 pub use repr::ReprView;
-#[cfg(feature = "eager")]
-pub use repr::EagerCacheLookup;
 
 #[cfg(test)]
 mod tests {
+	use crate::repr::Repr;
 	use std::cell::RefCell;
 	use std::rc::Rc;
-	use crate::repr::Repr;
 
 	#[derive(Debug, Copy, Clone)]
 	struct MinMax {
@@ -36,9 +36,31 @@ mod tests {
 			|mm| mm.min < mm.max,
 		);
 		let a = repr.borrow().min;
-		repr.mutate(|mm| mm.min = 4);
+		repr.borrow_mut().min = 4;
 		assert_eq!(4, repr.borrow().min);
 		assert_eq!(1, a);
+	}
+
+	#[test]
+	#[should_panic]
+	fn should_propagate_panic() {
+		let mut repr = Repr::new(
+			MinMax { min: 1, max: 5 },
+			|mm| {
+				if mm.max <= 5 {
+					mm.min < mm.max
+				} else {
+					panic!("random panic")
+				}
+			},
+		);
+		let a = repr.borrow().min;
+		{
+			repr.borrow_mut().min = 4;
+			assert_eq!(4, repr.borrow().min);
+			assert_eq!(1, a);
+		}
+		repr.borrow_mut().max = 10;
 	}
 
 	#[test]
@@ -48,7 +70,7 @@ mod tests {
 			MinMax { min: 1, max: 5 },
 			|mm| mm.min < mm.max,
 		);
-		repr.mutate(|mm| mm.min = 6);
+		repr.borrow_mut().min = 6;
 	}
 
 	#[test]
@@ -63,7 +85,7 @@ mod tests {
 				res
 			},
 		);
-		repr.mutate(|_| {});
+		repr.borrow_mut();
 	}
 
 	#[test]
@@ -74,7 +96,7 @@ mod tests {
 			|mm| mm.min < mm.max,
 			"min must always be less than max!".into(),
 		);
-		repr.mutate(|mm| mm.min = 6);
+		repr.borrow_mut().min = 6;
 	}
 
 	#[test]
@@ -83,12 +105,9 @@ mod tests {
 			MinMax { min: 1, max: 5 },
 			|mm| mm.min < mm.max,
 		);
-		fn get_min(mm: &MinMax) -> i32 {
-			mm.min
-		}
+		fn get_min(mm: &MinMax) -> i32 { mm.min }
 		assert_eq!(1, repr.lazy(get_min));
 		assert_eq!(1, repr.lazy(get_min));
-		// repr.mutate(|mm| mm.min = 4);
 	}
 	#[test]
 	fn should_invalidate_cache_on_mutation() {
@@ -101,7 +120,7 @@ mod tests {
 		}
 		assert_eq!(1, repr.lazy(get_min));
 		assert_eq!(1, repr.lazy(get_min));
-		repr.mutate(|mm| mm.min = 4);
+		repr.borrow_mut().min = 4;
 		assert_eq!(4, repr.lazy(get_min));
 		assert_eq!(4, repr.lazy(get_min));
 	}
@@ -114,7 +133,7 @@ mod tests {
 		);
 		assert_eq!(1, repr.lazy(|mm| mm.min));
 		assert_eq!(1, repr.lazy(|mm| mm.min));
-		repr.mutate(|mm| mm.min = 4);
+		repr.borrow_mut().min = 4;
 		assert_eq!(4, repr.lazy(|mm| mm.min));
 		assert_eq!(4, repr.lazy(|mm| mm.min));
 	}
@@ -135,7 +154,7 @@ mod tests {
 			}
 			assert_eq!(1, repr.eager(get_min).await);
 			assert_eq!(1, repr.eager(get_min).await);
-			// repr.mutate(|mm| mm.min = 4);
+			// repr.borrow_mut()n = 4;
 		}
 		#[tokio::test(flavor = "multi_thread")]
 		async fn should_invalidate_cache_on_mutation() {
@@ -148,7 +167,7 @@ mod tests {
 			}
 			assert_eq!(1, repr.eager(get_min).await);
 			assert_eq!(1, repr.eager(get_min).await);
-			repr.mutate(|mm| mm.min = 4);
+			repr.borrow_mut().min = 4;
 			assert_eq!(4, repr.eager(get_min).await);
 			assert_eq!(4, repr.eager(get_min).await);
 		}
@@ -161,7 +180,7 @@ mod tests {
 			);
 			assert_eq!(1, repr.eager(|mm| mm.min).await);
 			assert_eq!(1, repr.eager(|mm| mm.min).await);
-			repr.mutate(|mm| mm.min = 4);
+			repr.borrow_mut().min = 4;
 			assert_eq!(4, repr.eager(|mm| mm.min).await);
 			assert_eq!(4, repr.eager(|mm| mm.min).await);
 		}
@@ -191,7 +210,7 @@ mod tests {
 			assert_eq!(433494437, repr.eager(plus3).await);
 			assert_eq!(701408733, repr.eager(plus4).await);
 			assert_eq!(1134903170, repr.eager(plus5).await);
-			repr.mutate(|mm| mm.max = 42);
+			repr.borrow_mut().max = 42;
 			assert_eq!(267914296, repr.eager(plain_fib).await);
 		}
 
@@ -211,6 +230,30 @@ mod tests {
 			assert_eq!(1, repr.eager(get_min2).await);
 			assert_eq!(1, repr.eager(get_min).await);
 			assert!(repr.unregister(get_min2));
+		}
+
+		#[ignore]
+		#[tokio::test(flavor = "multi_thread")]
+		#[should_panic]
+		async fn should_propagate_panic_in_eager_cache() {
+			let mut repr = Repr::new(
+				MinMax { min: 1, max: 5 },
+				|mm| mm.min < mm.max,
+			);
+			fn get_min(mm: &MinMax) -> i32 {
+				mm.min
+			}
+			fn get_min2(mm: &MinMax) -> i32 {
+				if mm.min == 1 {
+					mm.min
+				} else {
+					panic!("random panic")
+				}
+			}
+			assert_eq!(1, repr.eager(get_min).await);
+			assert_eq!(1, repr.eager(get_min2).await);
+			assert_eq!(1, repr.eager(get_min).await);
+			repr.borrow_mut().min = 2;
 		}
 	}
 }

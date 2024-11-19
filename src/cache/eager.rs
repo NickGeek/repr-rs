@@ -22,7 +22,7 @@ impl<T: Clone + Sync + Send + 'static, R: Clone + Sync + Send + 'static> Cacheab
 		(self.read_fn)(arg)
 	}
 	
-	pub(crate) fn update(&mut self, value: &T) -> JoinHandle<()> {
+	pub(crate) fn update(&self, value: &T) -> JoinHandle<()> {
 		let mut writer = self.cache.write().unwrap();
 		*writer = None;
 		let cell = self.cache.clone();
@@ -36,7 +36,7 @@ impl<T: Clone + Sync + Send + 'static, R: Clone + Sync + Send + 'static> Cacheab
 	}
 }
 impl<T: 'static + Sync + Send + Clone, R: Clone + 'static + Send + Sync> Cache<T> for CacheableRead<T, R> {
-	fn notify(&mut self, value: &T) {
+	fn notify(&self, value: &T) {
 		self.update(value);
 	}
 }

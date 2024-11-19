@@ -22,7 +22,7 @@ impl<T, R: Clone> CacheableRead<T, R> {
 	}
 }
 impl<T: 'static, R: Clone + 'static> Cache<T> for CacheableRead<T, R> {
-	fn notify(&mut self, _: &T) {
+	fn notify(&self, _: &T) {
 		self.cache.replace(None);
 	}
 }
