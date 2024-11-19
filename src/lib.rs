@@ -1,3 +1,5 @@
+#![feature(freeze)]
+
 mod repr;
 mod cache;
 

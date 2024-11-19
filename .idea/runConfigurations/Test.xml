@@ -4,7 +4,7 @@
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <envs />
     <option name="emulateTerminal" value="true" />
-    <option name="channel" value="DEFAULT" />
+    <option name="channel" value="NIGHTLY" />
     <option name="requiredFeatures" value="true" />
     <option name="allFeatures" value="true" />
     <option name="withSudo" value="false" />

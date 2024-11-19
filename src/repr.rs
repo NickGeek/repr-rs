@@ -6,6 +6,7 @@ use std::cell::{Ref, RefCell, RefMut};
 use std::collections::BTreeMap;
 #[cfg(feature = "eager")]
 use std::future::Future;
+use std::marker::Freeze;
 use std::ops::{Deref, DerefMut};
 
 /// Wraps a value and ensures that an invariant is maintained while allowing that value to be
@@ -18,14 +19,19 @@ use std::ops::{Deref, DerefMut};
 /// With the feature `eager` enabled, the [`EagerCacheLookup`] trait is implemented for this struct
 /// and can be used to cache values eagerly. Whenever the value is mutated, all eager caches
 /// will be updated in parallel.
-pub struct Repr<T: 'static, I: Fn(&T) -> bool> {
+/// 
+/// We require [Freeze] for the invariant function to ensure that no interior mutability could
+/// invalidate the invariant. However, the Rust type system does not prevent other side effects
+/// like reading a file or generating a random number. Performing those side effects in your
+/// invariant function is a bug.
+pub struct Repr<T: 'static, I: Fn(&T) -> bool + Freeze> {
 	inner: RefCell<T>,
 	invariant: I,
 	caches: BTreeMap<usize, Box<dyn Cache<T>>>,
 	eager_caches: BTreeMap<usize, Box<dyn Cache<T>>>,
 	violation_message: Cow<'static, str>,
 }
-impl<T: 'static, I: Fn(&T) -> bool> Repr<T, I> {
+impl<T: 'static, I: Fn(&T) -> bool + Freeze> Repr<T, I> {
 	/// Creates a new Repr with the given value and invariant function.
 	/// ```rust
 	/// use repr_rs::Repr;
@@ -163,12 +169,12 @@ impl<T: 'static, I: Fn(&T) -> bool> Repr<T, I> {
 }
 
 #[cfg(feature = "eager")]
-pub trait EagerCacheLookup<T: Clone + Sync + Send + 'static, I: Fn(&T) -> bool> {
+pub trait EagerCacheLookup<T: Clone + Sync + Send + 'static, I: Fn(&T) -> bool + Freeze> {
 	fn eager<R: Clone + Clone + Sync + Send + 'static>(&mut self, read_fn: fn(&T) -> R) -> impl Future<Output=R>;
 	fn unregister<R: Clone + Clone + Sync + Send + 'static>(&mut self, read_fn: fn(&T) -> R) -> bool;
 }
 #[cfg(feature = "eager")]
-impl<T: Clone + Sync + Send + 'static, I: Fn(&T) -> bool> EagerCacheLookup<T, I> for Repr<T, I> {
+impl<T: Clone + Sync + Send + 'static, I: Fn(&T) -> bool + Freeze> EagerCacheLookup<T, I> for Repr<T, I> {
 	/// Borrows a read-only view of the value in the representation invariant and caches the
 	/// result of the read function. The cache is keyed by the read function's address, so in general
 	/// you should use function references instead of closures. It is a bug to perform any side effects
@@ -196,7 +202,7 @@ impl<T: Clone + Sync + Send + 'static, I: Fn(&T) -> bool> EagerCacheLookup<T, I>
 	}
 }
 
-impl<T: Clone, I: Fn(&T) -> bool + Clone> Clone for Repr<T, I> {
+impl<T: Clone, I: Fn(&T) -> bool + Clone + Freeze> Clone for Repr<T, I> {
 	fn clone(&self) -> Self {
 		let inner = self.borrow().clone();
 		Self::with_msg(inner, self.invariant.clone(), self.violation_message.clone())
@@ -213,22 +219,22 @@ impl<'a, T> Deref for ReprView<'a, T> {
 	}
 }
 
-pub struct ReprMutator<'a, T: 'static, I: Fn(&T) -> bool> {
+pub struct ReprMutator<'a, T: 'static, I: Fn(&T) -> bool + Freeze> {
 	inner: RefMut<'a, T>,
 	repr: &'a Repr<T, I>,
 }
-impl<'a, T, I: Fn(&T) -> bool> Deref for ReprMutator<'a, T, I> {
+impl<'a, T, I: Fn(&T) -> bool + Freeze> Deref for ReprMutator<'a, T, I> {
 	type Target = T;
 	fn deref(&self) -> &Self::Target {
 		&self.inner
 	}
 }
-impl<'a, T, I: Fn(&T) -> bool> DerefMut for ReprMutator<'a, T, I> {
+impl<'a, T, I: Fn(&T) -> bool + Freeze> DerefMut for ReprMutator<'a, T, I> {
 	fn deref_mut(&mut self) -> &mut Self::Target {
 		&mut self.inner
 	}
 }
-impl<T, I: Fn(&T) -> bool> Drop for ReprMutator<'_, T, I> {
+impl<T, I: Fn(&T) -> bool + Freeze> Drop for ReprMutator<'_, T, I> {
 	fn drop(&mut self) {
 		self.repr.check(&*self.inner);
 	}
