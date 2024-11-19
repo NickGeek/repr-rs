@@ -111,6 +111,17 @@ impl<T: 'static, I: Fn(&T) -> bool> Repr<T, I> {
 			repr: self,
 		}
 	}
+	/// Consumes the representation invariant and returns the inner value.
+	/// ```rust
+	/// use repr_rs::Repr;
+	/// struct MinMax { min: i32, max: i32 }
+	/// let repr = Repr::new(MinMax { min: 1, max: 5 }, |mm| mm.min < mm.max);
+	/// let inner = repr.into_inner();
+	/// assert_eq!(1, inner.min);
+	/// ```
+	pub fn into_inner(self) -> T {
+		self.inner.into_inner()
+	}
 	/// Borrows a read-only view of the value in the representation invariant and caches the
 	/// result of the read function. The cache is keyed by the read function's address, so in general
 	/// you should use function references instead of closures. It is a bug to perform any side effects
