@@ -54,7 +54,7 @@ impl<T: Debug + Clone + Sync + Send + 'static, I: Fn(&T) -> bool> EagerCacheLook
 	/// result of the read function. The cache is keyed by the read function's address, so in general
 	/// you should use function references instead of closures. It is a bug to perform any side effects
 	/// in the read function (i.e. reading from a file). This cache is updated eagerly, so whenever
-	/// the value is mutated, all eager caches will be updated in parallel. See [`Repr::lazy`] for
+	/// the value is mutated, all eager caches will be updated in parallel. See [`CacheableRepr::lazy`] for
 	/// a lazy version of this function.
 	#[allow(clippy::await_holding_refcell_ref)] // safe because the &mut self on this fn prevents other borrows
 	async fn eager<R: Clone + Sync + Send + 'static>(&mut self, read_fn: fn(&T) -> R) -> R {
