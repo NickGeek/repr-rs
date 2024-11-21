@@ -2,7 +2,7 @@
 // #![feature(const_mut_refs)]
 
 mod repr;
-mod cache;
+pub mod cache;
 
 #[cfg(feature = "eager")]
 pub use cache::eager::EagerCacheLookup;
@@ -10,6 +10,7 @@ pub use cache::CacheableRepr;
 // Re-exports
 pub use repr::Repr;
 pub use repr::ReprView;
+pub use repr::ReprMutator;
 
 #[cfg(test)]
 mod tests {
