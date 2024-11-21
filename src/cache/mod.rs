@@ -20,7 +20,7 @@ impl_downcast!(Cache<T>);
 /// read function is expensive. By default, the caching is lazy, so after a value is read once that
 /// same read function will fetch the cached value unless the value has been mutated.
 ///
-/// With the feature `eager` enabled, the [`EagerCacheLookup`] trait is implemented for this struct
+/// With the feature `eager` enabled, the [`crate::EagerCacheLookup`] trait is implemented for this struct
 /// and can be used to cache values eagerly. Whenever the value is mutated, all eager caches
 /// will be updated in parallel.
 /// 
