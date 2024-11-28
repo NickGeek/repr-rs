@@ -1,6 +1,6 @@
 pub(crate) mod lazy;
 #[cfg(feature = "eager")]
-pub(crate) mod eager;
+pub mod eager;
 
 use crate::Repr;
 use downcast_rs::{impl_downcast, Downcast};
@@ -35,6 +35,7 @@ impl<T: Debug + 'static, I: Fn(&T) -> bool> CacheableRepr<T, I> {
 	/// Creates a new representation invariant with the given value and invariant function.
 	/// ```rust
 	/// use repr_rs::CacheableRepr;
+	/// #[derive(Debug)]
 	/// struct MinMax { min: i32, max: i32 }
 	/// CacheableRepr::new(
 	///   MinMax { min: 1, max: 5 },
@@ -52,6 +53,7 @@ impl<T: Debug + 'static, I: Fn(&T) -> bool> CacheableRepr<T, I> {
 	/// Creates a new representation invariant with the given value, invariant function, and violation message.
 	/// ```rust
 	/// use repr_rs::CacheableRepr;
+	/// #[derive(Debug)]
 	/// struct MinMax { min: i32, max: i32 }
 	/// CacheableRepr::with_msg(
 	///   MinMax { min: 1, max: 5 },
@@ -70,6 +72,7 @@ impl<T: Debug + 'static, I: Fn(&T) -> bool> CacheableRepr<T, I> {
 	/// Borrows a read-only view of the value in the representation invariant.
 	/// ```rust
 	/// use repr_rs::CacheableRepr;
+	/// #[derive(Debug)]
 	/// struct MinMax { min: i32, max: i32 }
 	/// let repr = CacheableRepr::new(MinMax { min: 1, max: 5 }, |mm| mm.min < mm.max);
 	/// let view = repr.read();
@@ -85,6 +88,7 @@ impl<T: Debug + 'static, I: Fn(&T) -> bool> CacheableRepr<T, I> {
 	/// Borrows a mutable view of the value in the representation invariant.
 	/// ```rust
 	/// use repr_rs::CacheableRepr;
+	/// #[derive(Debug)]
 	/// struct MinMax { min: i32, max: i32 }
 	/// let mut repr = CacheableRepr::new(MinMax { min: 1, max: 5 }, |mm| mm.min < mm.max);
 	/// {
@@ -102,13 +106,14 @@ impl<T: Debug + 'static, I: Fn(&T) -> bool> CacheableRepr<T, I> {
 	/// example, this won't compile:
 	/// ```compile_fail
 	/// use repr_rs::CacheableRepr;
+	/// #[derive(Debug)]
 	/// struct MinMax { min: i32, max: i32 }
 	/// let mut repr = CacheableRepr::new(MinMax { min: 1, max: 5 }, |mm| mm.min < mm.max);
-	/// let view = repr.borrow();
+	/// let view = repr.read();
 	/// assert_eq!(1, view.min);
 	/// assert_eq!(5, view.max);
 	/// // error[E0502]: cannot borrow `repr` as mutable because it is also borrowed as immutable
-	/// repr.borrow_mut().min = 4;
+	/// repr.write().min = 4;
 	/// assert_eq!(4, view.min);
 	/// assert_eq!(5, view.max);
 	/// ```
@@ -122,6 +127,7 @@ impl<T: Debug + 'static, I: Fn(&T) -> bool> CacheableRepr<T, I> {
 	/// Consumes the representation invariant and returns the inner value.
 	/// ```rust
 	/// use repr_rs::Repr;
+	/// #[derive(Debug)]
 	/// struct MinMax { min: i32, max: i32 }
 	/// let repr = Repr::new(MinMax { min: 1, max: 5 }, |mm| mm.min < mm.max);
 	/// let inner = repr.into_inner();
@@ -138,6 +144,7 @@ impl<T: Debug + 'static, I: Fn(&T) -> bool> CacheableRepr<T, I> {
 	/// ```rust
 	/// use std::sync::atomic::{AtomicU32, Ordering};
 	/// use repr_rs::CacheableRepr;
+	/// #[derive(Debug)]
 	/// struct Person { name: String }
 	/// let mut repr = CacheableRepr::new(Person { name: "Alice and Bob together at last".into() }, |p| !p.name.is_empty());
 	/// static READ_SPY: AtomicU32 = AtomicU32::new(0);
@@ -192,6 +199,23 @@ impl<T: Debug + 'static, I: Fn(&T) -> bool> From<CacheableRepr<T, I>> for Repr<T
 		value.inner
 	}
 }
+/// # Safety
+/// This is safe because we can only mutate the inner value through the ReprMutator, which can only
+/// be created by borrowing the Repr mutably. The only other potential issue could be if the
+/// invariant function was not thread safe, which is why we require it to be [Sync].
+///
+/// The inner mutation (i.e. adding new caches or updating caches) either requires a mutable borrow
+/// or is guarded behind a lock.
+unsafe impl<T: Debug + Sync, I: Fn(&T) -> bool + Sync> Sync for CacheableRepr<T, I> {}
+/// # Safety
+/// We exclusively own all inner values here (both the repr and the caches), so we can safely
+/// implement Send for this type.
+unsafe impl<T: Debug + Send, I: Fn(&T) -> bool + Send> Send for CacheableRepr<T, I> {}
+impl<T: Debug, I: Fn(&T) -> bool> AsRef<T> for CacheableRepr<T, I> {
+	fn as_ref(&self) -> &T {
+		self.read()
+	}
+}
 impl<T: Debug + Clone, I: Fn(&T) -> bool + Clone> Clone for CacheableRepr<T, I> {
 	fn clone(&self) -> Self {
 		let clone = self.inner.clone();
@@ -234,13 +258,47 @@ impl<'a, T: Debug, I: Fn(&T) -> bool> Deref for ReprMutator<'a, T, I> {
 		unsafe { &*self.repr.inner.inner.get() }
 	}
 }
+impl<'a, T: Debug, I: Fn(&T) -> bool> AsRef<T> for ReprMutator<'a, T, I> {
+	fn as_ref(&self) -> &T {
+		self.deref()
+	}
+}
 impl<'a, T: Debug, I: Fn(&T) -> bool> DerefMut for ReprMutator<'a, T, I> {
 	fn deref_mut(&mut self) -> &mut Self::Target {
 		self.repr.inner.inner.get_mut()
 	}
 }
+impl<'a, T: Debug, I: Fn(&T) -> bool> AsMut<T> for ReprMutator<'a, T, I> {
+	fn as_mut(&mut self) -> &mut T {
+		self.deref_mut()
+	}
+}
 impl<T: Debug, I: Fn(&T) -> bool> Drop for ReprMutator<'_, T, I> {
 	fn drop(&mut self) {
 		self.repr.check();
+	}
+}
+
+// For Deref/DerefMut we need to make sure that it hashes, orders, and has equality with the
+// same semantics as the reference we give
+impl<'a, T: Debug + Hash> Hash for ReprMutator<'a, T, fn(&T) -> bool> {
+	fn hash<H: Hasher>(&self, state: &mut H) {
+		self.deref().hash(state);
+	}
+}
+impl<'a, T: Debug + PartialEq> PartialEq for ReprMutator<'a, T, fn(&T) -> bool> {
+	fn eq(&self, other: &Self) -> bool {
+		self.deref() == other.deref()
+	}
+}
+impl<'a, T: Debug + Eq> Eq for ReprMutator<'a, T, fn(&T) -> bool> {}
+impl<'a, T: Debug + PartialOrd> PartialOrd for ReprMutator<'a, T, fn(&T) -> bool> {
+	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		self.deref().partial_cmp(other.deref())
+	}
+}
+impl<'a, T: Debug + Ord> Ord for ReprMutator<'a, T, fn(&T) -> bool> {
+	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+		self.deref().cmp(other.deref())
 	}
 }

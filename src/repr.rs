@@ -1,4 +1,4 @@
-use std::cell::{Ref, UnsafeCell};
+use std::cell::UnsafeCell;
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
@@ -15,6 +15,7 @@ impl<T: Debug, I: Fn(&T) -> bool> Repr<T, I> {
 	/// Creates a new representation invariant with the given value and invariant function.
 	/// ```rust
 	/// use repr_rs::Repr;
+	/// #[derive(Debug)]
 	/// struct MinMax { min: i32, max: i32 }
 	/// Repr::new(
 	///   MinMax { min: 1, max: 5 },
@@ -31,6 +32,7 @@ impl<T: Debug, I: Fn(&T) -> bool> Repr<T, I> {
 	/// Creates a new representation invariant with the given value, invariant function, and violation message.
 	/// ```rust
 	/// use repr_rs::Repr;
+	/// #[derive(Debug)]
 	/// struct MinMax { min: i32, max: i32 }
 	/// Repr::with_msg(
 	///   MinMax { min: 1, max: 5 },
@@ -48,6 +50,7 @@ impl<T: Debug, I: Fn(&T) -> bool> Repr<T, I> {
 	/// Borrows a read-only view of the value in the representation invariant.
 	/// ```rust
 	/// use repr_rs::Repr;
+	/// #[derive(Debug)]
 	/// struct MinMax { min: i32, max: i32 }
 	/// let repr = Repr::new(MinMax { min: 1, max: 5 }, |mm| mm.min < mm.max);
 	/// let view = repr.read();
@@ -63,6 +66,7 @@ impl<T: Debug, I: Fn(&T) -> bool> Repr<T, I> {
 	/// Borrows a mutable view of the value in the representation invariant.
 	/// ```rust
 	/// use repr_rs::Repr;
+	/// #[derive(Debug)]
 	/// struct MinMax { min: i32, max: i32 }
 	/// let mut repr = Repr::new(MinMax { min: 1, max: 5 }, |mm| mm.min < mm.max);
 	/// {
@@ -80,13 +84,14 @@ impl<T: Debug, I: Fn(&T) -> bool> Repr<T, I> {
 	/// example, this won't compile:
 	/// ```compile_fail
 	/// use repr_rs::Repr;
+	/// #[derive(Debug)]
 	/// struct MinMax { min: i32, max: i32 }
 	/// let mut repr = Repr::new(MinMax { min: 1, max: 5 }, |mm| mm.min < mm.max);
-	/// let view = repr.borrow();
+	/// let view = repr.read();
 	/// assert_eq!(1, view.min);
 	/// assert_eq!(5, view.max);
 	/// // error[E0502]: cannot borrow `repr` as mutable because it is also borrowed as immutable
-	/// repr.borrow_mut().min = 4;
+	/// repr.write().min = 4;
 	/// assert_eq!(4, view.min);
 	/// assert_eq!(5, view.max);
 	/// ```
@@ -100,6 +105,7 @@ impl<T: Debug, I: Fn(&T) -> bool> Repr<T, I> {
 	/// Consumes the representation invariant and returns the inner value.
 	/// ```rust
 	/// use repr_rs::Repr;
+	/// #[derive(Debug)]
 	/// struct MinMax { min: i32, max: i32 }
 	/// let repr = Repr::new(MinMax { min: 1, max: 5 }, |mm| mm.min < mm.max);
 	/// let inner = repr.into_inner();
@@ -116,6 +122,22 @@ impl<T: Debug, I: Fn(&T) -> bool> Repr<T, I> {
 		for _ in 0..10 {
 			debug_assert!((self.invariant)(data), "Invariants should be deterministic! The invariant function for this Repr is not deterministic.");
 		}
+	}
+}
+
+/// # Safety
+/// This is safe because we can only mutate the inner value through the ReprMutator, which can only
+/// be created by borrowing the Repr mutably. The only other potential issue could be if the
+/// invariant function was not thread safe, which is why we require it to be [Sync].
+unsafe impl<T: Debug + Sync, I: Fn(&T) -> bool + Sync> Sync for Repr<T, I> {}
+/// # Safety
+/// We exclusively own the repr here, so we can safely  implement Send for this type.
+unsafe impl<T: Debug + Send, I: Fn(&T) -> bool + Send> Send for Repr<T, I> {}
+
+impl<T: Debug, I: Fn(&T) -> bool> AsRef<T> for Repr<T, I> {
+	#[inline]
+	fn as_ref(&self) -> &T {
+		self.read()
 	}
 }
 
@@ -149,17 +171,6 @@ impl <T: Debug + Display, I: Fn(&T) -> bool> Display for Repr<T, I> {
 }
 
 #[repr(transparent)]
-pub struct ReprView<'a, T> {
-	inner: Ref<'a, T>,
-}
-impl<'a, T> Deref for ReprView<'a, T> {
-	type Target = T;
-	fn deref(&self) -> &Self::Target {
-		&self.inner
-	}
-}
-
-#[repr(transparent)]
 pub struct ReprMutator<'a, T: Debug, I: Fn(&T) -> bool> {
 	// inner: &'a mut T,
 	repr: &'a mut Repr<T, I>,
@@ -180,5 +191,29 @@ impl<'a, T: Debug, I: Fn(&T) -> bool> DerefMut for ReprMutator<'a, T, I> {
 impl<T: Debug, I: Fn(&T) -> bool> Drop for ReprMutator<'_, T, I> {
 	fn drop(&mut self) {
 		self.repr.check();
+	}
+}
+
+// For Deref/DerefMut we need to make sure that it hashes, orders, and has equality with the
+// same semantics as the reference we give
+impl<'a, T: Debug + Hash> Hash for ReprMutator<'a, T, fn(&T) -> bool> {
+	fn hash<H: Hasher>(&self, state: &mut H) {
+		self.deref().hash(state);
+	}
+}
+impl<'a, T: Debug + PartialEq> PartialEq for ReprMutator<'a, T, fn(&T) -> bool> {
+	fn eq(&self, other: &Self) -> bool {
+		self.deref() == other.deref()
+	}
+}
+impl<'a, T: Debug + Eq> Eq for ReprMutator<'a, T, fn(&T) -> bool> {}
+impl<'a, T: Debug + PartialOrd> PartialOrd for ReprMutator<'a, T, fn(&T) -> bool> {
+	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		self.deref().partial_cmp(other.deref())
+	}
+}
+impl<'a, T: Debug + Ord> Ord for ReprMutator<'a, T, fn(&T) -> bool> {
+	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+		self.deref().cmp(other.deref())
 	}
 }
